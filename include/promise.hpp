@@ -8,11 +8,11 @@
 template <typename T>
 class Promise {
 public:
-    using ResolveFunction_t = std::function<void(T)>;
+    using ResolveFunction_t = std::function<void(const T&)>;
     using RejectFunction_t = std::function<void()>;
+    using ExecutorFunction_t = std::function<void(ResolveFunction_t, RejectFunction_t)>;
 
-    template <typename Lambda>
-    Promise<T>(Lambda executor_func);
+    Promise<T>(ExecutorFunction_t executor_func);
     ~Promise();
 
     Promise<T>(const Promise<T>&) = delete;
@@ -35,20 +35,15 @@ private:
     T m_value;
     std::thread m_thread;
 
-    void _resolve(T value);
+    void _resolve(const T& value);
     void _reject();
 };
 
 template <typename T>
-template <typename Lambda>
-Promise<T>::Promise(Lambda executor_func) {
-    static_assert(std::is_invocable_v<Lambda, ResolveFunction_t, RejectFunction_t>,
-            "Executor function must accept two arguments: a function<void(T)> and a function<void()>"
-    );
-
+Promise<T>::Promise(ExecutorFunction_t executor_func) {
     m_thread = std::thread([&executor_func, this]() {
         executor_func(
-                [this](T value){ this->_resolve(value); },
+                [this](const T& value){ this->_resolve(value); },
                 [this](){ this->_reject(); }
         );
     });
@@ -61,7 +56,7 @@ Promise<T>::~Promise() {
 }
 
 template <typename T>
-void Promise<T>::_resolve(T value) {
+void Promise<T>::_resolve(const T& value) {
     if (m_state == State::pending) {
         m_value = value;
         m_state = State::fulfilled;
