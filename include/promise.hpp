@@ -19,6 +19,8 @@ public:
     Promise<T>(const Promise<T>&) = delete;
     Promise<T>& operator=(const Promise<T>&) = delete;
 
+    Promise<T>& then(ResolveFunction_t on_resolve);
+
     void debug() const {
         const char* str = m_state == State::pending ? "pending" : (m_state == State::fulfilled ? "fulfilled" : "rejected");
         std::cout << "value: " << m_value << ", state: "
@@ -37,13 +39,15 @@ private:
     T m_value;
     std::thread m_thread;
 
+    ResolveFunction_t m_on_resolve_callback;
+
     void _resolve(const T& value);
     void _reject();
 };
 
 template <typename T>
 Promise<T>::Promise(ExecutorFunction_t executor_func) {
-    m_thread = std::thread([&executor_func, this]() {
+    m_thread = std::thread([executor_func, this]() {
         executor_func(
                 [this](const T& value){ this->_resolve(value); },
                 [this](){ this->_reject(); }
@@ -58,12 +62,29 @@ Promise<T>::~Promise() {
 }
 
 template <typename T>
+Promise<T>& Promise<T>::then(ResolveFunction_t on_resolve) {
+    std::lock_guard<std::mutex> lock(m_state_mutex);
+
+    if (m_state == State::fulfilled)
+        on_resolve(m_value);
+    else if (m_state == State::pending)
+        m_on_resolve_callback = on_resolve;
+
+    return *this;
+}
+
+template <typename T>
 void Promise<T>::_resolve(const T& value) {
     std::lock_guard<std::mutex> lock(m_state_mutex);
     if (m_state != State::pending) return;
 
     m_state = State::fulfilled;
     m_value = value;
+
+    if (m_on_resolve_callback) {
+        m_on_resolve_callback(m_value);
+        m_on_resolve_callback = nullptr;
+    }
 }
 
 template <typename T>
