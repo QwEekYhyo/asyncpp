@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <thread>
 
 template <typename T>
@@ -32,6 +33,7 @@ private:
     };
 
     State m_state{State::pending};
+    std::mutex m_state_mutex;
     T m_value;
     std::thread m_thread;
 
@@ -57,16 +59,19 @@ Promise<T>::~Promise() {
 
 template <typename T>
 void Promise<T>::_resolve(const T& value) {
-    if (m_state == State::pending) {
-        m_value = value;
-        m_state = State::fulfilled;
-    }
+    std::lock_guard<std::mutex> lock(m_state_mutex);
+    if (m_state != State::pending) return;
+
+    m_state = State::fulfilled;
+    m_value = value;
 }
 
 template <typename T>
 void Promise<T>::_reject() {
-    if (m_state == State::pending)
-        m_state = State::rejected;
+    std::lock_guard<std::mutex> lock(m_state_mutex);
+    if (m_state != State::pending) return;
+
+    m_state = State::rejected;
 }
 
 #endif // ASYNCPP_PROMISE_HPP
