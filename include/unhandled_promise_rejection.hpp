@@ -5,10 +5,10 @@
 
 class UnhandledPromiseRejection : public std::runtime_error {
 public:
-    UnhandledPromiseRejection(const std::string& message)
+    explicit UnhandledPromiseRejection(const std::string& message)
         : std::runtime_error(message) {}
 
-    UnhandledPromiseRejection(const char* message)
+    explicit UnhandledPromiseRejection(const char* message)
         : std::runtime_error(message) {}
 };
 

@@ -15,7 +15,11 @@ public:
     using RejectFunction_t = std::function<void()>;
     using ExecutorFunction_t = std::function<void(ResolveFunction_t, RejectFunction_t)>;
 
-    Promise<T>(ExecutorFunction_t executor_func);
+    /*
+     * Not 100% sure about the explicit keyword here as
+     * we might want to implicitly convert executor to Promise?
+     */
+    explicit Promise<T>(ExecutorFunction_t executor_func);
     ~Promise();
 
     Promise<T>(const Promise<T>&) = delete;
