@@ -1,12 +1,14 @@
 #include "../include/promise.hpp"
 
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 
 int main() {
     Promise<int> promise([](Promise<int>::ResolveFunction_t resolve, Promise<int>::RejectFunction_t reject) {
         std::cout << "trying to resolve\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        throw std::runtime_error("Runtime error occured");
         reject();
         resolve(69);
     });

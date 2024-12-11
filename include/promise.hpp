@@ -3,6 +3,7 @@
 
 #include "unhandled_promise_rejection.hpp"
 
+#include <exception>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -20,7 +21,7 @@ public:
      * we might want to implicitly convert executor to Promise?
      */
     explicit Promise<T>(ExecutorFunction_t executor_func);
-    ~Promise();
+    ~Promise() { clean_thread(); }
 
     Promise<T>(const Promise<T>&) = delete;
     Promise<T>& operator=(const Promise<T>&) = delete;
@@ -51,20 +52,35 @@ private:
 
     void _resolve(const T& value);
     void _reject();
+    
+    void clean_thread();
 };
 
 template <typename T>
 Promise<T>::Promise(ExecutorFunction_t executor_func) {
     m_thread = std::thread([executor_func, this]() {
-        executor_func(
-                [this](const T& value){ this->_resolve(value); },
-                [this](){ this->_reject(); }
-        );
+        try {
+            executor_func(
+                    [this](const T& value){ this->_resolve(value); },
+                    [this](){ this->_reject(); }
+            );
+        } catch (...) {
+            bool has_reject_callback;
+            {
+                std::lock_guard<std::mutex> lock(m_state_mutex);
+                has_reject_callback = bool(m_on_reject_callback);
+            }
+            if (has_reject_callback) _reject();
+            else {
+                clean_thread();
+                std::rethrow_exception(std::current_exception());
+            }
+        }
     });
 }
 
 template <typename T>
-Promise<T>::~Promise() {
+void Promise<T>::clean_thread() {
     if (m_thread.joinable())
         m_thread.detach();
 }
