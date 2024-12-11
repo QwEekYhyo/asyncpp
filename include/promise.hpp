@@ -26,6 +26,7 @@ public:
     Promise<T>& operator=(const Promise<T>&) = delete;
 
     Promise<T>& then(ResolveFunction_t on_resolve, RejectFunction_t on_reject = nullptr);
+    Promise<T>& catch_error(RejectFunction_t on_reject) { return then(nullptr, on_reject); }
 
     void debug() const {
         const char* str = m_state == State::pending ? "pending" : (m_state == State::fulfilled ? "fulfilled" : "rejected");
