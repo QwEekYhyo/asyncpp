@@ -1,6 +1,8 @@
 #ifndef ASYNCPP_PROMISE_HPP
 #define ASYNCPP_PROMISE_HPP
 
+#include "unhandled_promise_rejection.hpp"
+
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -19,7 +21,7 @@ public:
     Promise<T>(const Promise<T>&) = delete;
     Promise<T>& operator=(const Promise<T>&) = delete;
 
-    Promise<T>& then(ResolveFunction_t on_resolve);
+    Promise<T>& then(ResolveFunction_t on_resolve, RejectFunction_t on_reject = nullptr);
 
     void debug() const {
         const char* str = m_state == State::pending ? "pending" : (m_state == State::fulfilled ? "fulfilled" : "rejected");
@@ -40,6 +42,7 @@ private:
     std::thread m_thread;
 
     ResolveFunction_t m_on_resolve_callback;
+    RejectFunction_t  m_on_reject_callback;
 
     void _resolve(const T& value);
     void _reject();
@@ -62,13 +65,15 @@ Promise<T>::~Promise() {
 }
 
 template <typename T>
-Promise<T>& Promise<T>::then(ResolveFunction_t on_resolve) {
+Promise<T>& Promise<T>::then(ResolveFunction_t on_resolve, RejectFunction_t on_reject) {
     std::lock_guard<std::mutex> lock(m_state_mutex);
 
     if (m_state == State::fulfilled)
         on_resolve(m_value);
-    else if (m_state == State::pending)
+    else if (m_state == State::pending) {
         m_on_resolve_callback = on_resolve;
+        m_on_reject_callback = on_reject;
+    }
 
     return *this;
 }
@@ -93,6 +98,11 @@ void Promise<T>::_reject() {
     if (m_state != State::pending) return;
 
     m_state = State::rejected;
+
+    if (m_on_reject_callback) {
+        m_on_reject_callback();
+        m_on_reject_callback = nullptr;
+    } else throw UnhandledPromiseRejection("Some reason");
 }
 
 #endif // ASYNCPP_PROMISE_HPP
