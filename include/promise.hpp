@@ -13,7 +13,7 @@ template <typename T>
 class Promise {
 public:
     using ResolveFunction_t = std::function<void(const T&)>;
-    using RejectFunction_t = std::function<void()>;
+    using RejectFunction_t = std::function<void(const std::string&)>;
     using ExecutorFunction_t = std::function<void(ResolveFunction_t, RejectFunction_t)>;
 
     /*
@@ -51,7 +51,9 @@ private:
     RejectFunction_t  m_on_reject_callback;
 
     void _resolve(const T& value);
-    void _reject();
+    void _reject(const std::string& reason);
+
+    void _handle_exception(const std::string&);
     
     void clean_thread();
 };
@@ -62,21 +64,28 @@ Promise<T>::Promise(ExecutorFunction_t executor_func) {
         try {
             executor_func(
                     [this](const T& value){ this->_resolve(value); },
-                    [this](){ this->_reject(); }
+                    [this](const std::string& reason){ this->_reject(reason); }
             );
+        } catch (std::exception& e) {
+            _handle_exception(e.what());
         } catch (...) {
-            bool has_reject_callback;
-            {
-                std::lock_guard<std::mutex> lock(m_state_mutex);
-                has_reject_callback = bool(m_on_reject_callback);
-            }
-            if (has_reject_callback) _reject();
-            else {
-                clean_thread();
-                std::rethrow_exception(std::current_exception());
-            }
+            _handle_exception("Non-exception type thrown");
         }
     });
+}
+
+template <typename T>
+void Promise<T>::_handle_exception(const std::string& message) {
+    bool has_reject_callback;
+    {
+        std::lock_guard<std::mutex> lock(m_state_mutex);
+        has_reject_callback = bool(m_on_reject_callback);
+    }
+    if (has_reject_callback) _reject(message);
+    else {
+        clean_thread();
+        throw;
+    }
 }
 
 template <typename T>
@@ -114,16 +123,16 @@ void Promise<T>::_resolve(const T& value) {
 }
 
 template <typename T>
-void Promise<T>::_reject() {
+void Promise<T>::_reject(const std::string& reason) {
     std::lock_guard<std::mutex> lock(m_state_mutex);
     if (m_state != State::pending) return;
 
     m_state = State::rejected;
 
     if (m_on_reject_callback) {
-        m_on_reject_callback();
+        m_on_reject_callback(reason);
         m_on_reject_callback = nullptr;
-    } else throw UnhandledPromiseRejection("Some reason");
+    } else throw UnhandledPromiseRejection(reason);
 }
 
 #endif // ASYNCPP_PROMISE_HPP

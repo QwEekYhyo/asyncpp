@@ -9,7 +9,7 @@ int main() {
         std::cout << "trying to resolve\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         throw std::runtime_error("Runtime error occured");
-        reject();
+        reject("I don't want this promise");
         resolve(69);
     });
 
@@ -19,8 +19,8 @@ int main() {
             }
     )
     .catch_error(
-            [](){
-                std::cout << "Promise was rejected\n";
+            [](const std::string& reason){
+                std::cout << "Promise was rejected because: " << reason << '\n';
             }
     );
 
