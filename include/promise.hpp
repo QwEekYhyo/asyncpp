@@ -7,22 +7,24 @@
 #include <functional>
 #include <iostream>
 #include <mutex>
+#include <string_view>
 #include <thread>
 
 template <typename T>
 class Promise {
 public:
     using ResolveFunction_t = std::function<void(const T&)>;
-    using RejectFunction_t = std::function<void(const std::string&)>;
+    using RejectFunction_t = std::function<void(std::string_view)>;
     using ExecutorFunction_t = std::function<void(ResolveFunction_t, RejectFunction_t)>;
 
     /*
      * Not 100% sure about the explicit keyword here as
      * we might want to implicitly convert executor to Promise?
      */
-    explicit Promise<T>(ExecutorFunction_t executor_func);
+    explicit Promise(ExecutorFunction_t executor_func);
     ~Promise() { clean_thread(); }
 
+    Promise() = delete;
     Promise<T>(const Promise<T>&) = delete;
     Promise<T>& operator=(const Promise<T>&) = delete;
 
@@ -51,9 +53,9 @@ private:
     RejectFunction_t  m_on_reject_callback;
 
     void _resolve(const T& value);
-    void _reject(const std::string& reason);
+    void _reject(std::string_view reason);
 
-    void _handle_exception(const std::string&);
+    void _handle_exception(std::string_view);
     
     void clean_thread();
 };
@@ -64,7 +66,7 @@ Promise<T>::Promise(ExecutorFunction_t executor_func) {
         try {
             executor_func(
                     [this](const T& value){ this->_resolve(value); },
-                    [this](const std::string& reason){ this->_reject(reason); }
+                    [this](std::string_view reason){ this->_reject(reason); }
             );
         } catch (std::exception& e) {
             _handle_exception(e.what());
@@ -75,7 +77,7 @@ Promise<T>::Promise(ExecutorFunction_t executor_func) {
 }
 
 template <typename T>
-void Promise<T>::_handle_exception(const std::string& message) {
+void Promise<T>::_handle_exception(std::string_view message) {
     bool has_reject_callback;
     {
         std::lock_guard<std::mutex> lock(m_state_mutex);
@@ -123,7 +125,7 @@ void Promise<T>::_resolve(const T& value) {
 }
 
 template <typename T>
-void Promise<T>::_reject(const std::string& reason) {
+void Promise<T>::_reject(std::string_view reason) {
     std::lock_guard<std::mutex> lock(m_state_mutex);
     if (m_state != State::pending) return;
 

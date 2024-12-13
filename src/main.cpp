@@ -19,7 +19,7 @@ int main() {
             }
     )
     .catch_error(
-            [](const std::string& reason){
+            [](std::string_view reason){
                 std::cout << "Promise was rejected because: " << reason << '\n';
             }
     );
