@@ -20,8 +20,11 @@ public:
     /*
      * Not 100% sure about the explicit keyword here as
      * we might want to implicitly convert executor to Promise?
+     *
+     * Also, I don't think users should be able to set start_now to false.
+     * Need to change later
      */
-    explicit Promise(ExecutorFunction_t executor_func);
+    explicit Promise(ExecutorFunction_t executor_func, bool start_now = true);
     ~Promise() { clean_thread(); }
 
     Promise() = delete;
@@ -49,6 +52,7 @@ private:
     T m_value;
     std::thread m_thread;
 
+    ExecutorFunction_t m_executor_func;
     ResolveFunction_t m_on_resolve_callback;
     RejectFunction_t  m_on_reject_callback;
 
@@ -57,23 +61,16 @@ private:
 
     void _handle_exception(std::string_view);
     
+    void start_work();
     void clean_thread();
 };
 
 template <typename T>
-Promise<T>::Promise(ExecutorFunction_t executor_func) {
-    m_thread = std::thread([executor_func, this]() {
-        try {
-            executor_func(
-                    [this](const T& value){ this->_resolve(value); },
-                    [this](std::string_view reason){ this->_reject(reason); }
-            );
-        } catch (std::exception& e) {
-            _handle_exception(e.what());
-        } catch (...) {
-            _handle_exception("Non-exception type thrown");
-        }
-    });
+Promise<T>::Promise(ExecutorFunction_t executor_func, bool start_now)
+    : m_executor_func(executor_func)
+{
+    // m_executor_func = executor_func;
+    if (start_now) start_work();
 }
 
 template <typename T>
@@ -88,6 +85,22 @@ void Promise<T>::_handle_exception(std::string_view message) {
         clean_thread();
         throw;
     }
+}
+
+template <typename T>
+void Promise<T>::start_work() {
+    m_thread = std::thread([this]() {
+        try {
+            m_executor_func(
+                    [this](const T& value){ this->_resolve(value); },
+                    [this](std::string_view reason){ this->_reject(reason); }
+            );
+        } catch (std::exception& e) {
+            _handle_exception(e.what());
+        } catch (...) {
+            _handle_exception("Non-exception type thrown");
+        }
+    });
 }
 
 template <typename T>
